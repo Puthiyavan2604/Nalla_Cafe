@@ -1,0 +1,242 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Campus Cafe</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
+</head>
+<body>
+
+<header>
+    <div class="head-inner">
+        <div class="logo">Campus Cafe</div>
+        <nav>
+            <a href="#menu">Menu</a>
+            <a href="#about">About</a>
+            <a href="#order">Order</a>
+        </nav>
+    </div>
+</header>
+
+<main>
+    <section class="intro">
+        <h1>Good food, simple prices.</h1>
+        <p>Fresh snacks and drinks for your break.</p>
+    </section>
+
+    <section id="menu">
+        <h2>Menu</h2>
+
+        <div class="menu">
+            {% for product in products %}
+            <div class="food-card">
+                <div class="food-pic">
+                    {% if product.category == "Food" %}
+                        🍔
+                    {% else %}
+                        🥤
+                    {% endif %}
+                </div>
+
+                <div class="food-details">
+                    <h3>{{ product.name }}</h3>
+                    <p>{{ product.category }}</p>
+
+                    <div class="food-line">
+                        <strong>₹{{ "%.0f"|format(product.price) }}</strong>
+                        <button onclick="addToCart({{ product.id }})">Add</button>
+                    </div>
+                </div>
+            </div>
+            {% endfor %}
+        </div>
+    </section>
+
+    <section id="order" class="order-area">
+        <div class="cart">
+            <div class="title-row">
+                <h2>Your order</h2>
+                <button class="undo" onclick="undo()">Undo</button>
+            </div>
+
+            <div id="cart">
+                <p class="empty">No items added yet.</p>
+            </div>
+
+            <div class="checkout">
+                <h3>Checkout</h3>
+
+                <input id="customer" type="text" placeholder="Name" value="Student">
+
+                <label>
+                    <input type="checkbox" id="student">
+                    Student discount
+                </label>
+
+                <label>
+                    <input type="checkbox" id="cheese">
+                    Add cheese to food (+₹20)
+                </label>
+
+                <button class="place" onclick="checkout()">Place order</button>
+            </div>
+        </div>
+
+        <div class="status-box">
+            <h2>Order status</h2>
+            <div id="orderState">No order</div>
+            <button onclick="nextState()">Next status</button>
+            <p id="message"></p>
+        </div>
+    </section>
+
+    <section id="about" class="about">
+        <h2>About</h2>
+        <p>
+            Campus Cafe is a small online ordering page for students.
+            Pick something from the menu, add it to your order and place it
+            when you're ready.
+        </p>
+        <p>
+            We keep the menu short so you can find what you want quickly.
+        </p>
+    </section>
+</main>
+
+<footer>Campus Cafe</footer>
+
+<script>
+async function addToCart(id) {
+    const response = await fetch("/api/cart/add", {
+        method: "POST",
+        headers: {"Content-Type": "application/json"},
+        body: JSON.stringify({product_id: id})
+    });
+
+    const data = await response.json();
+
+    if (data.error) {
+        showMessage(data.error);
+        return;
+    }
+
+    renderCart(data);
+}
+
+async function undo() {
+    const response = await fetch("/api/cart/undo", {
+        method: "POST"
+    });
+
+    const data = await response.json();
+
+    if (data.error) {
+        showMessage(data.error);
+        return;
+    }
+
+    renderCart(data);
+}
+
+async function loadCart() {
+    const response = await fetch("/api/cart");
+    const data = await response.json();
+    renderCart(data);
+}
+
+function renderCart(data) {
+    const cart = document.getElementById("cart");
+
+    if (data.items.length === 0) {
+        cart.innerHTML = "<p class='empty'>No items added yet.</p>";
+        return;
+    }
+
+    const counts = {};
+
+    data.items.forEach(item => {
+        if (!counts[item.name]) {
+            counts[item.name] = {
+                name: item.name,
+                price: item.price,
+                count: 0
+            };
+        }
+        counts[item.name].count++;
+    });
+
+    let html = "";
+
+    Object.values(counts).forEach(item => {
+        html += `
+            <div class="cart-row">
+                <span>${item.name} × ${item.count}</span>
+                <span>₹${(item.price * item.count).toFixed(0)}</span>
+            </div>
+        `;
+    });
+
+    html += `
+        <div class="cart-total">
+            <span>Total</span>
+            <b>₹${data.total.toFixed(0)}</b>
+        </div>
+    `;
+
+    cart.innerHTML = html;
+}
+
+async function checkout() {
+    const response = await fetch("/api/checkout", {
+        method: "POST",
+        headers: {"Content-Type": "application/json"},
+        body: JSON.stringify({
+            customer: document.getElementById("customer").value,
+            student: document.getElementById("student").checked,
+            cheese: document.getElementById("cheese").checked
+        })
+    });
+
+    const data = await response.json();
+
+    if (data.error) {
+        showMessage(data.error);
+        return;
+    }
+
+    document.getElementById("orderState").textContent = data.state;
+
+    showMessage(
+        "Order #" + data.order.id +
+        " placed. Total: ₹" + data.order.total.toFixed(0)
+    );
+
+    loadCart();
+}
+
+async function nextState() {
+    const response = await fetch("/api/order/next", {
+        method: "POST"
+    });
+
+    const data = await response.json();
+
+    if (data.error) {
+        showMessage(data.error);
+        return;
+    }
+
+    document.getElementById("orderState").textContent = data.state;
+    showMessage("Status changed.");
+}
+
+function showMessage(message) {
+    document.getElementById("message").textContent = message;
+}
+
+loadCart();
+</script>
+
+</body>
+</html>
